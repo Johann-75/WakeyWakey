@@ -100,8 +100,8 @@ During development, several adjustments and optimizations were made:
     - *Issue*: Deleted URLs left orphaned check records in the database, bloating storage. This occurred because `passive_deletes=True` was bypasssing SQLAlchemy's cascading deletes when SQLite foreign key constraints were bypassed or un-enforced by database clients.
     - *Correction*: Removed `passive_deletes=True` from the SQLAlchemy relationship, forcing SQLAlchemy to explicitly delete child check records in Python when a URL is deleted. Executed a clean-up script to wipe existing orphans.
 
-7. **SQLite Connection-Level Foreign Key Enforcement**:
-    - *Issue*: SQLite ignores `ON DELETE CASCADE` foreign key constraints by default unless the connection runs `PRAGMA foreign_keys=ON` on initialization. If another query or database client bypassed SQLAlchemy, the database itself would not enforce the constraint.
-    - *Correction*: Added an `@event.listens_for(Engine, "connect")` listener in `database.py` to automatically execute `PRAGMA foreign_keys=ON` for every connection established by the SQLAlchemy engine, ensuring robust DB-level cascade deletes.
+7. **SQLite Connection Listener Hijacking on PostgreSQL Connections**:
+    - *Issue*: A globally registered connection event listener for enabling SQLite-specific settings (`PRAGMA foreign_keys=ON` and WAL mode) was executing on the PostgreSQL engine connection in production. The `PRAGMA` syntax failure aborted the PostgreSQL transaction block, causing all subsequent queries to fail with `InFailedSqlTransaction`.
+    - *Correction*: Refactored the listener registration to only bind directly to the SQLite engine instance instead of globally on the `Engine` class.
 
 ---

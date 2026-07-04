@@ -52,8 +52,10 @@ The application is designed to be easily deployed to a cloud provider using a se
     *   **Database**: Managed **Supabase (PostgreSQL)** instance.
 *   **Environment Variables**:
     *   **Backend**: `DATABASE_URL` (the connection string for your Postgres instance).
+        > [!IMPORTANT]
+        > If your backend hosting provider (like Railway) does not support outgoing IPv6 routing, you **must** use the **Supabase Session Pooler** connection string (which resolves to IPv4) instead of the Direct Connection string.
     *   **Frontend**: `VITE_API_BASE_URL` (the backend API URL).
-*   **Database Portability Note**: SQLite is configured for local development and docker-compose testing. In production, setting `DATABASE_URL` prompts the backend to automatically switch to PostgreSQL via the SQLAlchemy ORM models with zero code changes required.
+*   **Database Portability Note**: SQLite is configured for local development and docker-compose testing. In production, setting `DATABASE_URL` prompts the backend to automatically switch to PostgreSQL via SQLAlchemy. The codebase includes a database connection listener that dynamically registers SQLite-specific settings (like WAL mode and foreign key enforcement) only on SQLite engines, preventing syntax issues on PostgreSQL.
 
 ---
 
