@@ -29,7 +29,9 @@ if SQLALCHEMY_DATABASE_URL:
     engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 else:
     # Fallback to local SQLite
-    DB_PATH = os.getenv("DB_PATH", "./data/monitor.db")
+    DB_PATH = os.getenv("DB_PATH")
+    if not DB_PATH:
+        DB_PATH = "backend/data/monitor.db" if Path("backend").exists() else "data/monitor.db"
     db_file = Path(DB_PATH)
     if db_file.parent:
         db_file.parent.mkdir(parents=True, exist_ok=True)

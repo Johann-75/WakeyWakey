@@ -1,13 +1,13 @@
 import asyncio
 from contextlib import asynccontextmanager
+import os
 from time import perf_counter
-from typing import NamedTuple
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import httpx
-from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,41 +16,35 @@ from models import Check, Url
 from schemas import CheckResponse, HealthResponse, UrlCreate, UrlResponse, UrlWithLatestCheck
 
 
-CHECK_INTERVAL_SECONDS = 60
-REQUEST_TIMEOUT_SECONDS = 10
-scheduler = BackgroundScheduler()
-
-
-class CheckResult(NamedTuple):
-    url_id: int
-    status_code: int | None
-    response_time_ms: float | None
-    is_up: bool
+CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "60"))
+REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
+MAX_CONCURRENT_CHECKS = int(os.getenv("MAX_CONCURRENT_CHECKS", "20"))
+scheduler = AsyncIOScheduler()
 
 
 async def fetch_url_status(
     client: httpx.AsyncClient,
     url_id: int,
     url: str,
-) -> CheckResult:
+    semaphore: asyncio.Semaphore,
+) -> Check:
     status_code = None
     response_time_ms = None
     is_up = False
-    started_at = perf_counter()
+    async with semaphore:
+        started_at = perf_counter()
+        try:
+            response = await client.get(url)
+            response_time_ms = round((perf_counter() - started_at) * 1000, 2)
+            status_code = response.status_code
+            is_up = 200 <= response.status_code < 400
+        except Exception:
+            # Connection failure, timeout, DNS failure, ssl/value errors, etc.
+            response_time_ms = None
+            status_code = None
+            is_up = False
 
-    try:
-        response = await client.get(url)
-        response_time_ms = round((perf_counter() - started_at) * 1000, 2)
-        status_code = response.status_code
-        is_up = 200 <= response.status_code < 400
-    except httpx.RequestError:
-        # Connection failure, timeout, DNS failure, etc.
-        # No actual response was received, so response_time_ms is None
-        response_time_ms = None
-        status_code = None
-        is_up = False
-
-    return CheckResult(
+    return Check(
         url_id=url_id,
         status_code=status_code,
         response_time_ms=response_time_ms,
@@ -58,25 +52,24 @@ async def fetch_url_status(
     )
 
 
-async def check_single_url(url_id: int, url: str) -> CheckResult:
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    ) as client:
-        return await fetch_url_status(client, url_id, url)
-
-
-def insert_check(db: Session, result: CheckResult) -> Check:
-    check = Check(
-        url_id=result.url_id,
-        status_code=result.status_code,
-        response_time_ms=result.response_time_ms,
-        is_up=result.is_up,
-    )
-    db.add(check)
-    db.commit()
-    db.refresh(check)
-    return check
+async def check_single_url_task(url_id: int, url: str) -> None:
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            sem = asyncio.Semaphore(1)
+            check = await fetch_url_status(client, url_id, url, sem)
+        db = SessionLocal()
+        try:
+            db.add(check)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
 
 async def check_all_urls_async() -> None:
@@ -89,40 +82,28 @@ async def check_all_urls_async() -> None:
     if not urls:
         return
 
+    sem = asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=REQUEST_TIMEOUT_SECONDS,
     ) as client:
-        results = await asyncio.gather(
-            *(fetch_url_status(client, url_id, url) for url_id, url in urls)
+        checks = await asyncio.gather(
+            *(fetch_url_status(client, url_id, url, sem) for url_id, url in urls)
         )
 
     db = SessionLocal()
     try:
-        db.add_all(
-            Check(
-                url_id=result.url_id,
-                status_code=result.status_code,
-                response_time_ms=result.response_time_ms,
-                is_up=result.is_up,
-            )
-            for result in results
-        )
+        db.add_all(checks)
         db.commit()
     finally:
         db.close()
-
-
-def check_all_urls() -> None:
-    asyncio.run(check_all_urls_async())
-
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     scheduler.add_job(
-        check_all_urls,
+        check_all_urls_async,
         "interval",
         seconds=CHECK_INTERVAL_SECONDS,
         id="check_all_urls",
@@ -154,7 +135,11 @@ def health() -> HealthResponse:
 
 
 @app.post("/urls", response_model=UrlResponse, status_code=status.HTTP_201_CREATED)
-async def create_url(payload: UrlCreate, db: Session = Depends(get_db)) -> Url:
+async def create_url(
+    payload: UrlCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> Url:
     url = Url(url=str(payload.url))
     db.add(url)
     try:
@@ -167,37 +152,61 @@ async def create_url(payload: UrlCreate, db: Session = Depends(get_db)) -> Url:
         ) from exc
 
     db.refresh(url)
-    result = await check_single_url(url.id, url.url)
-    insert_check(db, result)
+    background_tasks.add_task(check_single_url_task, url.id, url.url)
     return url
 
 
 @app.get("/urls", response_model=list[UrlWithLatestCheck])
 def list_urls(db: Session = Depends(get_db)) -> list[UrlWithLatestCheck]:
     urls = db.scalars(select(Url).order_by(Url.created_at.desc())).all()
-    response = []
+    if not urls:
+        return []
 
+    url_ids = [url.id for url in urls]
+
+    # Fetch last 10 checks per URL in one query using ROW_NUMBER() CTE
+    subq = (
+        select(
+            Check,
+            func.row_number().over(
+                partition_by=Check.url_id,
+                order_by=(Check.checked_at.desc(), Check.id.desc())
+            ).label("rn")
+        )
+        .where(Check.url_id.in_(url_ids))
+        .cte("ranked_checks")
+    )
+
+    stmt = (
+        select(Check)
+        .join(subq, Check.id == subq.c.id)
+        .where(subq.c.rn <= 10)
+        .order_by(Check.url_id, Check.checked_at.desc(), Check.id.desc())
+    )
+    checks = db.scalars(stmt).all()
+
+    from collections import defaultdict
+    checks_by_url = defaultdict(list)
+    for check in checks:
+        checks_by_url[check.url_id].append(check)
+
+    response = []
     for url in urls:
-        recent_checks = db.scalars(
-            select(Check)
-            .where(Check.url_id == url.id)
-            .order_by(Check.checked_at.desc(), Check.id.desc())
-            .limit(10)
-        ).all()
-        
+        recent_checks = checks_by_url[url.id]
         latest_check = recent_checks[0] if recent_checks else None
-        data = UrlWithLatestCheck.model_validate(url).model_dump()
-        if latest_check:
-            data.update(
-                {
-                    "status_code": latest_check.status_code,
-                    "response_time_ms": latest_check.response_time_ms,
-                    "is_up": latest_check.is_up,
-                    "checked_at": latest_check.checked_at,
-                }
+        
+        response.append(
+            UrlWithLatestCheck(
+                id=url.id,
+                url=url.url,
+                created_at=url.created_at,
+                status_code=latest_check.status_code if latest_check else None,
+                response_time_ms=latest_check.response_time_ms if latest_check else None,
+                is_up=latest_check.is_up if latest_check else None,
+                checked_at=latest_check.checked_at if latest_check else None,
+                recent_checks=recent_checks,
             )
-        data["recent_checks"] = recent_checks
-        response.append(UrlWithLatestCheck(**data))
+        )
 
     return response
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -18,9 +18,10 @@ function formatResponseTime(value) {
   return `${Math.round(value)} ms`;
 }
 
-function Sparkline({ history, urlId }) {
-  // Extract valid latency points (exclude null/undefined)
-  const points = history
+function Sparkline({ history }) {
+  // Extract valid latency points (ordered oldest to newest)
+  const points = [...(history || [])]
+    .reverse()
     .filter(c => c.response_time_ms !== null && c.response_time_ms !== undefined)
     .map(c => c.response_time_ms);
 
@@ -30,68 +31,26 @@ function Sparkline({ history, urlId }) {
   const max = Math.max(...points);
   const range = max - min;
 
-  // Damping: If variation range is very small (<50ms), do not exaggerate color changes.
-  // This keeps stable, consistent connections rendering as a uniform color theme.
-  const minDampRange = 50;
-  const effectiveRange = Math.max(range, minDampRange);
-
-  // SVG dimensions
   const width = 120;
   const height = 30;
   const padding = 2;
 
-  // Map points to SVG coordinates
-  // X is distributed evenly across the width
-  // Y is normalized (higher latency = peak = smaller Y in SVG coordinates)
   const svgPoints = points.map((val, index) => {
     const x = padding + (index / (points.length - 1)) * (width - 2 * padding);
     const y = height - padding - ((val - min) / (range || 1)) * (height - 2 * padding);
-    return { x, y, val };
+    return { x, y };
   });
 
-  // Generate path "d" attribute: "M x0 y0 L x1 y1 ..."
   const pathD = svgPoints
     .map((p, index) => `${index === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
     .join(" ");
 
-  // Interpolate color between green (#10b981), yellow (#eab308), and red (#ef4444)
-  // to avoid muddy olive midpoints.
-  const getInterpolatedColor = (val) => {
-    const factor = (val - min) / effectiveRange;
-    let r, g, b;
-    if (factor < 0.5) {
-      const segmentFactor = factor * 2;
-      r = Math.round(16 + segmentFactor * (234 - 16));
-      g = Math.round(185 + segmentFactor * (179 - 185));
-      b = Math.round(129 + segmentFactor * (8 - 129));
-    } else {
-      const segmentFactor = (factor - 0.5) * 2;
-      r = Math.round(234 + segmentFactor * (239 - 234));
-      g = Math.round(179 + segmentFactor * (68 - 179));
-      b = Math.round(8 + segmentFactor * (68 - 8));
-    }
-    return `rgb(${r}, ${g}, ${b})`;
-  };
-
-  // Generate gradient stops (using stable urlId instead of random floats to prevent DOM churn)
-  const gradientId = `sparkline-grad-${urlId}`;
-  const stops = svgPoints.map((p, index) => {
-    const offset = (index / (svgPoints.length - 1)) * 100;
-    const color = getInterpolatedColor(p.val);
-    return <stop key={index} offset={`${offset}%`} stopColor={color} />;
-  });
-
   return (
     <svg className="sparklineSvg" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <defs>
-        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-          {stops}
-        </linearGradient>
-      </defs>
       <path
         d={pathD}
         fill="none"
-        stroke={`url(#${gradientId})`}
+        stroke="#6366f1"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -105,8 +64,8 @@ function CheckHistoryDots({ history }) {
     return <div className="historyDotsEmpty">No checks yet</div>;
   }
 
-  // Get the is_up values for the last 5 checks
-  const lastFiveIsUp = history.slice(-5).map(c => c.is_up);
+  // Get the 5 newest checks and order them oldest-to-newest for rendering
+  const lastFiveIsUp = history.slice(0, 5).reverse().map(c => c.is_up);
 
   const maxDots = 5;
   const paddingCount = maxDots - lastFiveIsUp.length;
@@ -223,6 +182,11 @@ function App() {
     const trimmedUrl = newUrl.trim();
     if (!trimmedUrl) return;
 
+    let formattedUrl = trimmedUrl;
+    if (!/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
     setSaving(true);
     setError("");
 
@@ -230,7 +194,7 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/urls`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmedUrl }),
+        body: JSON.stringify({ url: formattedUrl }),
       });
 
       if (!response.ok) {
@@ -293,7 +257,7 @@ function App() {
         </div>
       </section>
 
-      <form className="addForm" onSubmit={handleSubmit}>
+      <form className="addForm" onSubmit={handleSubmit} noValidate>
         <div className="inputWrapper">
           <input
             aria-label="URL"
@@ -364,11 +328,11 @@ function App() {
                 </td>
                 <td className="responseCell">
                   <span className="responseText">{formatResponseTime(item.response_time_ms)}</span>
-                  <Sparkline history={[...(item.recent_checks || [])].reverse()} urlId={item.id} />
+                  <Sparkline history={item.recent_checks} />
                 </td>
                 <td>{formatTime(item.checked_at)}</td>
                 <td>
-                  <CheckHistoryDots history={[...(item.recent_checks || [])].reverse()} />
+                  <CheckHistoryDots history={item.recent_checks} />
                 </td>
                 <td>
                   <button

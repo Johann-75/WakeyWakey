@@ -1,6 +1,6 @@
 # WakeyWakey: URL Uptime Monitor
 
-A lightweight, full-stack application designed to periodically check the status of registered URLs and display their current state (UP/DOWN) and response times in real time.
+A simple, full-stack app that checks if your registered websites are working (UP or DOWN) and displays their response times on a live dashboard.
 
 ---
 
@@ -57,11 +57,15 @@ The application is designed to be easily deployed to a cloud provider using a se
     *   **Backend**: Deployed on **Railway** using the provided `backend/Dockerfile`. A persistent process (like Railway) is selected over stateless serverless functions (like Vercel Functions) to keep the background ping scheduler running continuously.
     *   **Database**: Managed **Supabase (PostgreSQL)** instance.
 *   **Environment Variables**:
-    *   **Backend**: `DATABASE_URL` (the connection string for your Postgres instance).
+    *   **Backend**:
+        *   `DATABASE_URL`: Connection string for PostgreSQL instance in production (defaults to local SQLite if omitted).
+        *   `CHECK_INTERVAL_SECONDS`: The interval (in seconds) between background pings (default: `60`).
+        *   `REQUEST_TIMEOUT_SECONDS`: The timeout limit (in seconds) for outgoing HTTP requests (default: `10`).
+        *   `MAX_CONCURRENT_CHECKS`: The limit for concurrent outgoing HTTP check connections (default: `20`).
         > [!IMPORTANT]
         > If your backend hosting provider (like Railway) does not support outgoing IPv6 routing, you **must** use the **Supabase Session Pooler** connection string (which resolves to IPv4) instead of the Direct Connection string.
     *   **Frontend**: `VITE_API_BASE_URL` (the backend API URL).
-*   **Database Portability Note**: SQLite is configured for local development and docker-compose testing. In production, setting `DATABASE_URL` prompts the backend to automatically switch to PostgreSQL via SQLAlchemy. The codebase includes a database connection listener that dynamically registers SQLite-specific settings (like WAL mode and foreign key enforcement) only on SQLite engines, preventing syntax issues on PostgreSQL.
+*   **Database Portability Note**: The app uses SQLite locally, but automatically switches to PostgreSQL in production if you supply a `DATABASE_URL`. The code handles this switch automatically, enabling SQLite-specific settings (like file locks and foreign keys) safely without breaking PostgreSQL.
 
 ---
 
@@ -71,12 +75,10 @@ If this application needed to scale further, we'd recommend deploying the contai
 Key architectural points to consider:
 
 * **Production Storage & Serverless Inconsistency**:
-  - Cloud Run is stateless/serverless, so mounting SQLite persistently isn't viable without a network filesystem (adds latency/complexity).
-  - We'd migrate to Cloud SQL (Postgres) instead, injecting the connection string via Secret Manager at runtime.
+  - Serverless hosting (like Google Cloud Run) is stateless, which means SQLite database files will get wiped every time the server restarts. To solve this in production, we switch to a managed PostgreSQL database (like Cloud SQL) and pass the connection details safely at runtime.
 
 * **Build-Time Environment Variable Warning**:
-  - Vite bakes `VITE_API_BASE_URL` into the build at compile time, so it's not adjustable at runtime.
-  - For production, we'd route through a reverse proxy (Nginx/Cloud LB) at a relative `/api` path instead, keeping the frontend image environment-agnostic.
+  - Vite hardcodes the backend address (`VITE_API_BASE_URL`) into the static website files when it builds. This means you cannot change this address after the frontend is compiled. In production, we avoid this by routing requests through a web server proxy (like Nginx) at a relative `/api` path.
 
 Here is a hypothetical **Terraform** snippet outlining the backend Cloud Run service deployment:
 
