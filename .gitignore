@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# SQLite databases
+backend/data/
+*.db
+*.sqlite3
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# pnpm local store
+.pnpm-store/
+
+# Environment files
+.env
+.env.local
+.env.*.local

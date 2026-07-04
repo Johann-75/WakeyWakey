@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.pnpm-store/
+.npmrc
+.env
+.env.local
+.env.development
+.env.production
