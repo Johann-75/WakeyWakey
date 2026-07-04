@@ -43,6 +43,12 @@ To verify that the monitor correctly detects both "UP" and "DOWN" states, follow
 
 ## ☁️ Deployment
 
+### Live Production Deployment
+*   **Frontend Dashboard (Vercel)**: [https://wakey-wakey-nine.vercel.app/](https://wakey-wakey-nine.vercel.app/)
+*   **Backend API (Railway)**: [https://wakeywakey-production.up.railway.app/](https://wakeywakey-production.up.railway.app/)
+    *   API Health Endpoint: [https://wakeywakey-production.up.railway.app/health](https://wakeywakey-production.up.railway.app/health)
+    *   API Interactive Swagger Documentation: [https://wakeywakey-production.up.railway.app/docs](https://wakeywakey-production.up.railway.app/docs)
+
 ### Target MVP Deployment Stack
 The application is designed to be easily deployed to a cloud provider using a serverless frontend + persistent backend process:
 
