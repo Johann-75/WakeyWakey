@@ -2,6 +2,8 @@
 
 A simple, full-stack app that checks if your registered websites are working (UP or DOWN) and displays their response times on a live dashboard.
 
+![Dashboard](./dashboard.png)
+
 ---
 
 ## 🚀 Setup
