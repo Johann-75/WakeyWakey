@@ -45,9 +45,9 @@ To verify that the monitor correctly detects both "UP" and "DOWN" states, follow
 
 ### Live Production Deployment
 *   **Frontend Dashboard (Vercel)**: [https://wakey-wakey-nine.vercel.app/](https://wakey-wakey-nine.vercel.app/)
-*   **Backend API (Railway)**: [https://wakeywakey-production.up.railway.app/](https://wakeywakey-production.up.railway.app/)
-    *   API Health Endpoint: [https://wakeywakey-production.up.railway.app/health](https://wakeywakey-production.up.railway.app/health)
-    *   API Interactive Swagger Documentation: [https://wakeywakey-production.up.railway.app/docs](https://wakeywakey-production.up.railway.app/docs)
+*   **Backend API (Render)**: [https://wakeywakey-fpq5.onrender.com](https://wakeywakey-fpq5.onrender.com/)
+    *   API Health Endpoint: [https://wakeywakey-fpq5.onrender.com/health](https://wakeywakey-fpq5.onrender.com/health)
+    *   API Interactive Swagger Documentation: [https://wakeywakey-fpq5.onrender.com/docs](https://wakeywakey-fpq5.onrender.com/docs)
 
 ### Target MVP Deployment Stack
 The application is designed to be easily deployed to a cloud provider using a serverless frontend + persistent backend process:
@@ -120,6 +120,7 @@ WakeyWakey/
 │   ├── schemas.py            # Pydantic request/response schemas
 │   ├── database.py           # SQLite engine + session factory
 │   ├── requirements.txt      # Python dependencies
+│   ├── view_db.py            # Helper script to inspect SQLite database locally
 │   └── Dockerfile            # python:3.11-slim image
 │
 ├── frontend/                 # React + Vite SPA dashboard
