@@ -54,18 +54,14 @@ The application is designed to be easily deployed to a cloud provider using a se
 
 *   **Hosting Stack**:
     *   **Frontend**: Deployed on **Vercel** as a static single-page app (built from the `/frontend` root directory).
-    *   **Backend**: Deployed on **Railway** using the provided `backend/Dockerfile`. A persistent process (like Railway) is selected over stateless serverless functions (like Vercel Functions) to keep the background ping scheduler running continuously.
-    *   **Database**: Managed **Supabase (PostgreSQL)** instance.
+    *   **Backend**: Deployed on **Render** as a Web Service. A persistent process (like Render) is selected over stateless serverless functions (like Render Functions) to keep the background ping scheduler running continuously.
+    *   **Database**: Local SQLite (self-cleaning via daily container restarts)
 *   **Environment Variables**:
     *   **Backend**:
-        *   `DATABASE_URL`: Connection string for PostgreSQL instance in production (defaults to local SQLite if omitted).
         *   `CHECK_INTERVAL_SECONDS`: The interval (in seconds) between background pings (default: `60`).
         *   `REQUEST_TIMEOUT_SECONDS`: The timeout limit (in seconds) for outgoing HTTP requests (default: `10`).
         *   `MAX_CONCURRENT_CHECKS`: The limit for concurrent outgoing HTTP check connections (default: `20`).
-        > [!IMPORTANT]
-        > If your backend hosting provider (like Railway) does not support outgoing IPv6 routing, you **must** use the **Supabase Session Pooler** connection string (which resolves to IPv4) instead of the Direct Connection string.
     *   **Frontend**: `VITE_API_BASE_URL` (the backend API URL).
-*   **Database Portability Note**: The app uses SQLite locally, but automatically switches to PostgreSQL in production if you supply a `DATABASE_URL`. The code handles this switch automatically, enabling SQLite-specific settings (like file locks and foreign keys) safely without breaking PostgreSQL.
 
 ---
 

@@ -70,6 +70,8 @@ Here is the chronological sequence of prompts used to build, schedule, display, 
 *   **Prompt**: `"now bro i want u to implement Dockerfile for backend (python slim, uvicorn), Dockerfile for frontend (node build -> serve via nginx or vite preview), docker-compose.yml with backend, frontend, and a named volume for SQLite data. Single command: docker compose up., also bro can u check tht assignment pdf to see whether our app satisfies exactly what is meant to be done?"`
 *   **Action**: The AI audited requirements from the assignment PDF, generated the Docker files, wrote Nginx routing rules, set up the Docker Compose named volumes, and upgraded the CSS styling to a high-fidelity dark mode with micro-animations.
 
+### ☁️ Phase 6: Migration to Render & SQLite
+* **Action**: Shifted deployment stack to Render + SQLite to support 100% free hosting. Purged redundant `/checks` history endpoint to reduce API footprint, simplified database connections to SQLite-only, and optimized build steps in the backend Dockerfile.
 ---
 
 ## 🔄 The Course Corrections
@@ -131,5 +133,9 @@ During development, several adjustments and optimizations were made to fix bugs 
 14. **Unifying Database Path Resolution**:
     - *Issue*: Running the app locally without Docker created database files in different folders depending on whether you ran commands from the project root or the backend folder directly.
     - *Correction*: Configured smart folder detection so that SQLite resolves consistently to `backend/data/monitor.db` in both cases, preventing duplicate databases.
+
+15. **Removing Unused API Endpoints**:
+    - *Issue*: The backend had a separate `/urls/{url_id}/checks` history endpoint. However, the frontend dashboard was optimized to load all recent checks inline via the main `/urls` list endpoint, leaving the history endpoint unused.
+    - *Correction*: Deleted the redundant endpoint to keep the API surface clean.
 
 ---
