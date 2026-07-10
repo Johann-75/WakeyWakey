@@ -1,0 +1,14 @@
+.git/
+.gitignore
+.agents/
+.pnpm-store/
+node_modules/
+backend/data/
+backend/__pycache__/
+backend/view_db.py
+frontend/node_modules/
+frontend/dist/
+*.db
+*.pdf
+AI_LOG.md
+README.md
