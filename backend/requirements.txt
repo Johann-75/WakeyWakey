@@ -3,4 +3,3 @@ uvicorn
 sqlalchemy
 httpx
 apscheduler
-psycopg2-binary
