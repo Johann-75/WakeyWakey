@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from database import Base, SessionLocal, engine, get_db
 from models import Check, Url
-from schemas import CheckResponse, HealthResponse, UrlCreate, UrlResponse, UrlWithLatestCheck
+from schemas import HealthResponse, UrlCreate, UrlResponse, UrlWithLatestCheck
 
 
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "60"))
@@ -209,19 +209,6 @@ def list_urls(db: Session = Depends(get_db)) -> list[UrlWithLatestCheck]:
         )
 
     return response
-
-
-@app.get("/urls/{url_id}/checks", response_model=list[CheckResponse])
-def list_checks(url_id: int, db: Session = Depends(get_db)) -> list[Check]:
-    url = db.get(Url, url_id)
-    if not url:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="URL not found")
-
-    return db.scalars(
-        select(Check)
-        .where(Check.url_id == url_id)
-        .order_by(Check.checked_at.desc(), Check.id.desc())
-    ).all()
 
 
 @app.delete("/urls/{url_id}", status_code=status.HTTP_204_NO_CONTENT)
