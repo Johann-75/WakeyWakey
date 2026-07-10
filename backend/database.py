@@ -19,30 +19,20 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.close()
 
 
-# Support PostgreSQL (e.g. Supabase) in production, default to SQLite locally
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+DB_PATH = os.getenv("DB_PATH")
+if not DB_PATH:
+    DB_PATH = "backend/data/monitor.db" if Path("backend").exists() else "data/monitor.db"
+db_file = Path(DB_PATH)
+if db_file.parent:
+    db_file.parent.mkdir(parents=True, exist_ok=True)
 
-if SQLALCHEMY_DATABASE_URL:
-    # Adjust for PostgreSQL connections (fix dialect name replacement if needed)
-    if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
-else:
-    # Fallback to local SQLite
-    DB_PATH = os.getenv("DB_PATH")
-    if not DB_PATH:
-        DB_PATH = "backend/data/monitor.db" if Path("backend").exists() else "data/monitor.db"
-    db_file = Path(DB_PATH)
-    if db_file.parent:
-        db_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_file}"
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-    )
-    # Register event listener ONLY on the SQLite engine instance
-    event.listen(engine, "connect", set_sqlite_pragma)
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_file}"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
+# Register event listener ONLY on the SQLite engine instance
+event.listen(engine, "connect", set_sqlite_pragma)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -53,3 +43,4 @@ def get_db():
         yield db
     finally:
         db.close()
+
